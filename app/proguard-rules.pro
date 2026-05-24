@@ -1,0 +1,2 @@
+-keep class io.grpc.** { *; }
+-keep class com.spacex.** { *; }

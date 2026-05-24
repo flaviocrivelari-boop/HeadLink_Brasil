@@ -1,0 +1,77 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="#0a0f1e">
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:padding="16dp">
+        <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:background="#141e35" android:orientation="vertical" android:padding="20dp"
+            android:layout_marginBottom="16dp">
+            <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
+                android:text="Starlink Field App" android:textColor="#00e676"
+                android:textSize="22sp" android:textStyle="bold"/>
+            <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
+                android:text="HeadLink Brasil - Diagnostico local via gRPC" android:textColor="#475569"
+                android:textSize="12sp" android:layout_marginTop="4dp"/>
+        </LinearLayout>
+        <EditText android:id="@+id/etCliente" android:layout_width="match_parent"
+            android:layout_height="wrap_content" android:hint="Nome do cliente"
+            android:textColorHint="#475569" android:textColor="#e2e8f0"
+            android:background="#131929" android:padding="14dp"
+            android:layout_marginBottom="8dp" android:inputType="textPersonName"/>
+        <EditText android:id="@+id/etLocal" android:layout_width="match_parent"
+            android:layout_height="wrap_content" android:hint="Local / endereco"
+            android:textColorHint="#475569" android:textColor="#e2e8f0"
+            android:background="#131929" android:padding="14dp"
+            android:layout_marginBottom="16dp" android:inputType="textPostalAddress"/>
+        <TextView android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:text="Conecte ao Wi-Fi da Starlink antes de ler"
+            android:background="#1c1033" android:textColor="#fcd34d"
+            android:padding="12dp" android:textSize="13sp" android:layout_marginBottom="16dp"/>
+        <TextView android:id="@+id/tvStatus" android:layout_width="match_parent"
+            android:layout_height="wrap_content" android:text="Aguardando leitura..."
+            android:textColor="#475569" android:textSize="13sp" android:layout_marginBottom="8dp"/>
+        <Button android:id="@+id/btnLer" android:layout_width="match_parent"
+            android:layout_height="56dp" android:text="LER DADOS DA STARLINK"
+            android:backgroundTint="#00e676" android:textColor="#000000"
+            android:textStyle="bold" android:textSize="15sp" android:layout_marginBottom="12dp"
+            android:stateListAnimator="@null"/>
+        <ProgressBar android:id="@+id/progressBar" android:layout_width="wrap_content"
+            android:layout_height="wrap_content" android:layout_gravity="center_horizontal"
+            android:visibility="gone" android:layout_marginBottom="12dp"/>
+        <LinearLayout android:id="@+id/cardResultado" android:layout_width="match_parent"
+            android:layout_height="wrap_content" android:background="#131929"
+            android:orientation="vertical" android:padding="16dp"
+            android:layout_marginBottom="12dp" android:visibility="gone">
+            <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
+                android:text="DADOS DO DISH" android:textColor="#00e676"
+                android:textSize="11sp" android:textStyle="bold" android:layout_marginBottom="10dp"/>
+            <TextView android:id="@+id/tvResultado" android:layout_width="match_parent"
+                android:layout_height="wrap_content" android:textColor="#e2e8f0"
+                android:textSize="14sp" android:fontFamily="monospace" android:layout_marginBottom="14dp"/>
+            <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
+                android:text="ALERTAS" android:textColor="#00e676"
+                android:textSize="11sp" android:textStyle="bold" android:layout_marginBottom="8dp"/>
+            <TextView android:id="@+id/tvAlertas" android:layout_width="match_parent"
+                android:layout_height="wrap_content" android:textColor="#22c55e"
+                android:textSize="14sp" android:layout_marginBottom="14dp"/>
+            <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
+                android:text="OBSERVACOES" android:textColor="#00e676"
+                android:textSize="11sp" android:textStyle="bold" android:layout_marginBottom="8dp"/>
+            <EditText android:id="@+id/etObs" android:layout_width="match_parent"
+                android:layout_height="wrap_content" android:hint="Notas do tecnico..."
+                android:textColorHint="#475569" android:textColor="#e2e8f0"
+                android:background="#0d1424" android:padding="12dp"
+                android:minLines="3" android:gravity="top" android:inputType="textMultiLine"/>
+        </LinearLayout>
+        <Button android:id="@+id/btnCompartilhar" android:layout_width="match_parent"
+            android:layout_height="56dp" android:text="COMPARTILHAR NO WHATSAPP"
+            android:backgroundTint="#16a34a" android:textColor="#ffffff"
+            android:textStyle="bold" android:textSize="15sp" android:visibility="gone"
+            android:stateListAnimator="@null"/>
+    </LinearLayout>
+</ScrollView>

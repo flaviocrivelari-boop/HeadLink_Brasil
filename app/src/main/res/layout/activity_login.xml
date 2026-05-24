@@ -1,0 +1,181 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="#0a0f1e">
+
+    <!-- Fundo escuro com gradiente simulando a imagem do screenshot -->
+    <View
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:background="@drawable/bg_gradient"/>
+
+    <!-- Conteúdo centralizado -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:orientation="vertical"
+        android:gravity="center"
+        android:padding="24dp">
+
+        <!-- Título HeadLink Brasil -->
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="HeadLink Brasil"
+            android:textColor="#00e676"
+            android:textSize="34sp"
+            android:textStyle="bold"
+            android:layout_marginBottom="32dp"
+            android:letterSpacing="-0.02"/>
+
+        <!-- Card de login -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:background="@drawable/card_login"
+            android:padding="28dp"
+            android:gravity="center">
+
+            <!-- Ícone cadeado -->
+            <FrameLayout
+                android:layout_width="72dp"
+                android:layout_height="72dp"
+                android:background="@drawable/circle_green"
+                android:layout_marginBottom="20dp">
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_gravity="center"
+                    android:text="&#x1F512;"
+                    android:textSize="30sp"/>
+            </FrameLayout>
+
+            <!-- Título Portal do Cliente -->
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Portal do Cliente"
+                android:textColor="#ffffff"
+                android:textSize="24sp"
+                android:textStyle="bold"
+                android:layout_marginBottom="8dp"/>
+
+            <!-- Subtítulo -->
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Acesso seguro ao status dos dispositivos"
+                android:textColor="#94a3b8"
+                android:textSize="13sp"
+                android:gravity="center"
+                android:layout_marginBottom="8dp"/>
+
+            <!-- Status do sistema -->
+            <TextView
+                android:id="@+id/tvStatus"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Status do Sistema: Aguardando credenciais"
+                android:textColor="#64748b"
+                android:textSize="12sp"
+                android:gravity="center"
+                android:layout_marginBottom="28dp"/>
+
+            <!-- Label Usuário -->
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="Usuário"
+                android:textColor="#e2e8f0"
+                android:textSize="14sp"
+                android:layout_marginBottom="8dp"/>
+
+            <!-- Campo Usuário -->
+            <EditText
+                android:id="@+id/etUsuario"
+                android:layout_width="match_parent"
+                android:layout_height="52dp"
+                android:hint="seu@email.com"
+                android:textColorHint="#475569"
+                android:textColor="#e2e8f0"
+                android:textSize="15sp"
+                android:background="@drawable/input_bg"
+                android:paddingStart="16dp"
+                android:paddingEnd="16dp"
+                android:inputType="text"
+                android:layout_marginBottom="20dp"
+                android:singleLine="true"/>
+
+            <!-- Label Senha -->
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="Senha"
+                android:textColor="#e2e8f0"
+                android:textSize="14sp"
+                android:layout_marginBottom="8dp"/>
+
+            <!-- Campo Senha -->
+            <EditText
+                android:id="@+id/etSenha"
+                android:layout_width="match_parent"
+                android:layout_height="52dp"
+                android:hint="••••••••"
+                android:textColorHint="#475569"
+                android:textColor="#e2e8f0"
+                android:textSize="15sp"
+                android:background="@drawable/input_bg"
+                android:paddingStart="16dp"
+                android:paddingEnd="16dp"
+                android:inputType="textPassword"
+                android:layout_marginBottom="28dp"
+                android:singleLine="true"/>
+
+            <!-- Botão Entrar -->
+            <Button
+                android:id="@+id/btnEntrar"
+                android:layout_width="match_parent"
+                android:layout_height="54dp"
+                android:text="Entrar"
+                android:textColor="#000000"
+                android:textSize="17sp"
+                android:textStyle="bold"
+                android:backgroundTint="#00e676"
+                android:stateListAnimator="@null"/>
+
+        </LinearLayout>
+
+        <!-- Versão e badge -->
+        <LinearLayout
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:layout_marginTop="20dp"
+            android:gravity="center_vertical">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="v2026.05.20-001"
+                android:textColor="#475569"
+                android:textSize="12sp"
+                android:layout_marginEnd="8dp"/>
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="PRODUÇÃO"
+                android:textColor="#00e676"
+                android:textSize="11sp"
+                android:textStyle="bold"
+                android:background="@drawable/badge_prod"
+                android:paddingStart="8dp"
+                android:paddingEnd="8dp"
+                android:paddingTop="3dp"
+                android:paddingBottom="3dp"/>
+        </LinearLayout>
+
+    </LinearLayout>
+</FrameLayout>

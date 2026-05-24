@@ -1,0 +1,54 @@
+syntax = "proto3";
+package SpaceX.API.Device;
+option java_package = "com.spacex.api.device";
+option java_multiple_files = true;
+
+service Device {
+    rpc Handle(Request) returns (Response) {}
+}
+
+message Request {
+    string target_id = 1000;
+    oneof request {
+        GetStatusRequest get_status = 1004;
+    }
+}
+
+message Response {
+    oneof response {
+        DishGetStatusResponse dish_get_status = 1006;
+    }
+}
+
+message GetStatusRequest {}
+
+message DishGetStatusResponse {
+    DishState state = 1;
+    DishAlerts alerts = 3;
+    float snr = 4;
+    bool currently_obstructed = 5;
+    float fraction_obstructed = 6;
+    uint32 uptime_s = 7;
+    float pop_ping_drop_rate = 10;
+    float downlink_throughput_bps = 11;
+    float uplink_throughput_bps = 12;
+    float pop_ping_latency_ms = 13;
+    string software_version = 18;
+}
+
+message DishAlerts {
+    bool motors_stuck = 1;
+    bool thermal_throttle = 3;
+    bool slow_ethernet_speeds = 4;
+    bool moving_while_not_mobile = 8;
+    bool low_motor_current = 15;
+    bool mast_not_near_vertical = 24;
+    bool disk_obstructed = 31;
+}
+
+enum DishState {
+    UNKNOWN = 0;
+    CONNECTED = 1;
+    SEARCHING = 2;
+    BOOTING = 3;
+}
