@@ -15,10 +15,14 @@ import kotlinx.coroutines.withContext
 import java.text.SimpleDateFormat
 import java.util.*
 import java.util.concurrent.TimeUnit
+import kotlin.math.roundToInt
 
 class MainActivity : AppCompatActivity() {
 
-    private var currentData: DishGetStatusResponse? = null
+    private var statusData: DishGetStatusResponse? = null
+    private var deviceInfoData: GetDeviceInfoResponse? = null
+    private var historyData: GetHistoryResponse? = null
+
     private lateinit var etCliente: EditText
     private lateinit var etLocal: EditText
     private lateinit var etObs: EditText
@@ -52,105 +56,234 @@ class MainActivity : AppCompatActivity() {
         setLoading(true)
         tvStatus.text = "Conectando em 192.168.100.1:9200..."
         tvStatus.setTextColor(Color.parseColor("#94a3b8"))
+
         lifecycleScope.launch {
             try {
-                val resultado = withContext(Dispatchers.IO) {
-                    val channel = ManagedChannelBuilder
+                val channel = withContext(Dispatchers.IO) {
+                    ManagedChannelBuilder
                         .forAddress("192.168.100.1", 9200)
                         .usePlaintext()
                         .build()
-                    try {
-                        val stub = DeviceGrpc.newBlockingStub(channel)
-                            .withDeadlineAfter(10, TimeUnit.SECONDS)
-                        val req = Request.newBuilder()
-                            .setGetStatus(GetStatusRequest.getDefaultInstance())
-                            .build()
-                        stub.handle(req).dishGetStatus
-                    } finally {
-                        channel.shutdown().awaitTermination(2, TimeUnit.SECONDS)
-                    }
                 }
-                currentData = resultado
-                exibirDados(resultado)
+
+                val stub = withContext(Dispatchers.IO) {
+                    DeviceGrpc.newBlockingStub(channel)
+                        .withDeadlineAfter(10, TimeUnit.SECONDS)
+                }
+
+                // Coleta status principal
+                statusData = withContext(Dispatchers.IO) {
+                    stub.handle(Request.newBuilder()
+                        .setGetStatus(GetStatusRequest.getDefaultInstance())
+                        .build()).dishGetStatus
+                }
+
+                // Coleta device info (serial, hardware version, etc)
+                try {
+                    deviceInfoData = withContext(Dispatchers.IO) {
+                        stub.handle(Request.newBuilder()
+                            .setGetDeviceInfo(GetDeviceInfoRequest.getDefaultInstance())
+                            .build()).getDeviceInfo
+                    }
+                } catch (e: Exception) { /* opcional */ }
+
+                // Coleta historico (metricas dos ultimos 15 min)
+                try {
+                    historyData = withContext(Dispatchers.IO) {
+                        stub.handle(Request.newBuilder()
+                            .setGetHistory(GetHistoryRequest.getDefaultInstance())
+                            .build()).getHistory
+                    }
+                } catch (e: Exception) { /* opcional */ }
+
+                withContext(Dispatchers.IO) {
+                    channel.shutdown().awaitTermination(2, TimeUnit.SECONDS)
+                }
+
+                exibirDados()
+
             } catch (e: Exception) {
                 setLoading(false)
-                tvStatus.text = "Erro: ${e.message?.take(80)}"
+                tvStatus.text = "Erro: ${e.message?.take(100)}"
                 tvStatus.setTextColor(Color.parseColor("#ef4444"))
-                Toast.makeText(this@MainActivity, "Verifique se esta no Wi-Fi da Starlink", Toast.LENGTH_LONG).show()
+                Toast.makeText(this@MainActivity,
+                    "Verifique se esta no Wi-Fi da Starlink", Toast.LENGTH_LONG).show()
             }
         }
     }
 
-    private fun exibirDados(d: DishGetStatusResponse) {
+    private fun exibirDados() {
+        val d = statusData ?: return
         setLoading(false)
+
         val online  = d.state == DishState.CONNECTED
         val dlMbps  = d.downlinkThroughputBps / 1_000_000f
         val ulMbps  = d.uplinkThroughputBps / 1_000_000f
         val plPct   = d.popPingDropRate * 100f
         val obsPct  = d.fractionObstructed * 100f
         val uptimeH = d.uptimeS / 3600f
-        tvStatus.text = if (online) "Leitura concluida!" else "Dish offline ou buscando sinal"
-        tvStatus.setTextColor(if (online) Color.parseColor("#22c55e") else Color.parseColor("#f59e0b"))
-        tvResultado.text = buildString {
-            appendLine("Status:      ${if (online) "ONLINE" else "OFFLINE"}")
-            appendLine("Download:    ${"%.1f".format(dlMbps)} Mbps")
-            appendLine("Upload:      ${"%.1f".format(ulMbps)} Mbps")
-            appendLine("Latencia:    ${"%.0f".format(d.popPingLatencyMs)} ms")
-            appendLine("Packet Loss: ${"%.2f".format(plPct)}%")
-            appendLine("Obstrucao:   ${"%.1f".format(obsPct)}%")
-            appendLine("Uptime:      ${"%.1f".format(uptimeH)} h")
-            append("Firmware:    ${d.softwareVersion.ifBlank { "---" }}")
+
+        // Info do device (serial, hw version)
+        val di = deviceInfoData?.deviceInfo ?: d.deviceInfo
+        val serial  = di?.serialNumber?.ifBlank { "---" } ?: "---"
+        val hwVer   = di?.hardwareVersion?.ifBlank { "---" } ?: "---"
+        val swVer   = d.softwareVersion.ifBlank { di?.softwareVersion?.ifBlank { "---" } ?: "---" }
+
+        // Media do historico
+        var avgPing = 0f; var avgDl = 0f; var avgUl = 0f; var avgDrop = 0f
+        historyData?.dish?.let { h ->
+            val n = minOf(900, h.popPingLatencyMsCount)
+            if (n > 0) {
+                avgPing = (0 until n).map { h.getPopPingLatencyMs(it) }.average().toFloat()
+                avgDl   = (0 until n).map { h.getDownlinkThroughputBps(it) }.average().toFloat() / 1_000_000f
+                avgUl   = (0 until n).map { h.getUplinkThroughputBps(it) }.average().toFloat() / 1_000_000f
+                avgDrop = (0 until n).map { h.getPopPingDropRate(it) }.average().toFloat() * 100f
+            }
         }
+
+        tvStatus.text = if (online) "Leitura concluida com sucesso!" else "Dish offline ou buscando sinal"
+        tvStatus.setTextColor(if (online) Color.parseColor("#22c55e") else Color.parseColor("#f59e0b"))
+
+        tvResultado.text = buildString {
+            appendLine("=== IDENTIFICACAO ===")
+            appendLine("Serial Number: $serial")
+            appendLine("Hardware:      $hwVer")
+            appendLine("Firmware:      $swVer")
+            appendLine("")
+            appendLine("=== CONECTIVIDADE ATUAL ===")
+            appendLine("Status:        ${if (online) "ONLINE" else "OFFLINE"}")
+            appendLine("Download:      ${"%.1f".format(dlMbps)} Mbps")
+            appendLine("Upload:        ${"%.1f".format(ulMbps)} Mbps")
+            appendLine("Latencia:      ${"%.0f".format(d.popPingLatencyMs)} ms")
+            appendLine("Packet Loss:   ${"%.2f".format(plPct)}%")
+            appendLine("SNR:           ${"%.1f".format(d.snr)} dB")
+            appendLine("")
+            appendLine("=== MEDIA 15 MINUTOS ===")
+            if (avgPing > 0f) {
+                appendLine("Download med:  ${"%.1f".format(avgDl)} Mbps")
+                appendLine("Upload med:    ${"%.1f".format(avgUl)} Mbps")
+                appendLine("Latencia med:  ${"%.0f".format(avgPing)} ms")
+                appendLine("Pkt Loss med:  ${"%.2f".format(avgDrop)}%")
+            } else {
+                appendLine("(historico nao disponivel)")
+            }
+            appendLine("")
+            appendLine("=== ANTENA ===")
+            appendLine("Obstrucao:     ${"%.1f".format(obsPct)}%")
+            appendLine("Obstr.atual:   ${if (d.currentlyObstructed) "SIM" else "Nao"}")
+            appendLine("Azimute:       ${"%.1f".format(d.directionAzimuth)} graus")
+            appendLine("Elevacao:      ${"%.1f".format(d.directionElevation)} graus")
+            appendLine("Uptime:        ${"%.1f".format(uptimeH)} h")
+            appendLine("")
+            appendLine("=== GPS ===")
+            appendLine("GPS valido:    ${if (d.gpsValid) "Sim" else "Nao"}")
+            append("Satelites GPS: ${d.gpsSats}")
+        }
+
         val alertas = mutableListOf<String>()
-        if (d.alerts.motorsStuck)         alertas += "Motor preso"
-        if (d.alerts.thermalThrottle)     alertas += "Thermal throttle"
-        if (d.alerts.mastNotNearVertical) alertas += "Antena inclinada"
-        if (d.alerts.diskObstructed)      alertas += "Dish obstruido"
-        if (d.alerts.slowEthernetSpeeds)  alertas += "Ethernet lento"
-        tvAlertas.text = if (alertas.isEmpty()) "Nenhum alerta ativo" else alertas.joinToString("\n")
-        tvAlertas.setTextColor(if (alertas.isEmpty()) Color.parseColor("#22c55e") else Color.parseColor("#ef4444"))
+        if (d.alerts.motorsStuck)               alertas += "Motor preso"
+        if (d.alerts.thermalThrottle)            alertas += "Thermal throttle"
+        if (d.alerts.mastNotNearVertical)        alertas += "Antena inclinada"
+        if (d.alerts.diskObstructed)             alertas += "Dish obstruido"
+        if (d.alerts.slowEthernetSpeeds)         alertas += "Ethernet lento"
+        if (d.alerts.softwareInstallPending)     alertas += "Atualizacao pendente"
+        if (d.alerts.movingWhileNotMobile)       alertas += "Movendo sem modo mobile"
+        if (d.alerts.powerSupplyThermalThrottle) alertas += "Fonte superaquecida"
+        if (d.alerts.roamingNoService)           alertas += "Roaming sem servico"
+
+        tvAlertas.text = if (alertas.isEmpty()) "Nenhum alerta ativo"
+                         else alertas.joinToString("\n") { "• $_it" }
+        tvAlertas.setTextColor(if (alertas.isEmpty()) Color.parseColor("#22c55e")
+                               else Color.parseColor("#ef4444"))
+
         cardResultado.visibility = View.VISIBLE
         btnCompartilhar.visibility = View.VISIBLE
     }
 
     private fun compartilharWhatsApp() {
-        val d = currentData ?: return
-        val agora  = SimpleDateFormat("dd/MM/yyyy HH:mm", Locale("pt","BR")).format(Date())
-        val dlMbps = d.downlinkThroughputBps / 1_000_000f
-        val ulMbps = d.uplinkThroughputBps / 1_000_000f
-        val plPct  = d.popPingDropRate * 100f
-        val obsPct = d.fractionObstructed * 100f
+        val d = statusData ?: return
+        val agora   = SimpleDateFormat("dd/MM/yyyy HH:mm", Locale("pt","BR")).format(Date())
+        val online  = d.state == DishState.CONNECTED
+        val dlMbps  = d.downlinkThroughputBps / 1_000_000f
+        val ulMbps  = d.uplinkThroughputBps / 1_000_000f
+        val plPct   = d.popPingDropRate * 100f
+        val obsPct  = d.fractionObstructed * 100f
         val uptimeH = d.uptimeS / 3600f
-        val online = d.state == DishState.CONNECTED
-        val cli = etCliente.text.toString().trim()
-        val loc = etLocal.text.toString().trim()
-        val obs = etObs.text.toString().trim()
+        val cli     = etCliente.text.toString().trim()
+        val loc     = etLocal.text.toString().trim()
+        val obs     = etObs.text.toString().trim()
+
+        val di     = deviceInfoData?.deviceInfo ?: d.deviceInfo
+        val serial = di?.serialNumber?.ifBlank { "---" } ?: "---"
+        val hwVer  = di?.hardwareVersion?.ifBlank { "---" } ?: "---"
+        val swVer  = d.softwareVersion.ifBlank { "---" }
+
+        var avgPing = 0f; var avgDl = 0f; var avgUl = 0f; var avgDrop = 0f
+        historyData?.dish?.let { h ->
+            val n = minOf(900, h.popPingLatencyMsCount)
+            if (n > 0) {
+                avgPing = (0 until n).map { h.getPopPingLatencyMs(it) }.average().toFloat()
+                avgDl   = (0 until n).map { h.getDownlinkThroughputBps(it) }.average().toFloat() / 1_000_000f
+                avgUl   = (0 until n).map { h.getUplinkThroughputBps(it) }.average().toFloat() / 1_000_000f
+                avgDrop = (0 until n).map { h.getPopPingDropRate(it) }.average().toFloat() * 100f
+            }
+        }
+
+        val alertas = mutableListOf<String>()
+        if (d.alerts.motorsStuck)               alertas += "Motor preso"
+        if (d.alerts.thermalThrottle)            alertas += "Thermal throttle"
+        if (d.alerts.mastNotNearVertical)        alertas += "Antena inclinada"
+        if (d.alerts.diskObstructed)             alertas += "Dish obstruido"
+        if (d.alerts.slowEthernetSpeeds)         alertas += "Ethernet lento"
+        if (d.alerts.softwareInstallPending)     alertas += "Atualizacao pendente"
+        if (d.alerts.movingWhileNotMobile)       alertas += "Movendo sem modo mobile"
+        if (d.alerts.powerSupplyThermalThrottle) alertas += "Fonte superaquecida"
+        if (d.alerts.roamingNoService)           alertas += "Roaming sem servico"
+
         val msg = buildString {
-            appendLine("*RELATORIO STARLINK*")
+            appendLine("*RELATORIO STARLINK - HeadLink Brasil*")
             appendLine("Data: $agora")
             if (cli.isNotBlank()) appendLine("Cliente: $cli")
             if (loc.isNotBlank()) appendLine("Local: $loc")
             appendLine("")
-            appendLine("*CONECTIVIDADE*")
+            appendLine("*IDENTIFICACAO*")
+            appendLine("Serial Number: $serial")
+            appendLine("Hardware: $hwVer")
+            appendLine("Firmware: $swVer")
+            appendLine("")
+            appendLine("*CONECTIVIDADE ATUAL*")
             appendLine("Status: ${if (online) "Online" else "Offline"}")
             appendLine("Download: ${"%.1f".format(dlMbps)} Mbps")
             appendLine("Upload: ${"%.1f".format(ulMbps)} Mbps")
             appendLine("Latencia: ${"%.0f".format(d.popPingLatencyMs)} ms")
             appendLine("Packet Loss: ${"%.2f".format(plPct)}%")
+            appendLine("SNR: ${"%.1f".format(d.snr)} dB")
             appendLine("")
-            appendLine("*HARDWARE*")
+            if (avgPing > 0f) {
+                appendLine("*MEDIA ULTIMOS 15 MINUTOS*")
+                appendLine("Download: ${"%.1f".format(avgDl)} Mbps")
+                appendLine("Upload: ${"%.1f".format(avgUl)} Mbps")
+                appendLine("Latencia: ${"%.0f".format(avgPing)} ms")
+                appendLine("Packet Loss: ${"%.2f".format(avgDrop)}%")
+                appendLine("")
+            }
+            appendLine("*ANTENA E GPS*")
             appendLine("Obstrucao: ${"%.1f".format(obsPct)}%")
+            appendLine("Obstruido agora: ${if (d.currentlyObstructed) "SIM" else "Nao"}")
+            appendLine("Azimute: ${"%.1f".format(d.directionAzimuth)} graus")
+            appendLine("Elevacao: ${"%.1f".format(d.directionElevation)} graus")
+            appendLine("GPS valido: ${if (d.gpsValid) "Sim" else "Nao"}")
+            appendLine("Satelites GPS: ${d.gpsSats}")
             appendLine("Uptime: ${"%.1f".format(uptimeH)} h")
-            appendLine("Firmware: ${d.softwareVersion.ifBlank{"---"}}")
             appendLine("")
             appendLine("*ALERTAS*")
-            appendLine("Motor preso: ${if (d.alerts.motorsStuck) "SIM" else "Nao"}")
-            appendLine("Thermal: ${if (d.alerts.thermalThrottle) "SIM" else "Nao"}")
-            appendLine("Inclinada: ${if (d.alerts.mastNotNearVertical) "SIM" else "Nao"}")
-            appendLine("Obstruida: ${if (d.alerts.diskObstructed) "SIM" else "Nao"}")
+            if (alertas.isEmpty()) appendLine("Nenhum alerta ativo")
+            else alertas.forEach { appendLine("• $it") }
             if (obs.isNotBlank()) { appendLine(""); appendLine("Obs: $obs") }
-            append("_App Starlink Field_")
+            appendLine("")
+            append("_HeadLink Brasil - Todos os direitos reservados_")
         }
+
         try {
             startActivity(Intent(Intent.ACTION_SEND).apply {
                 type = "text/plain"; setPackage("com.whatsapp")
