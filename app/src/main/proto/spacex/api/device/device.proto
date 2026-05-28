@@ -36,13 +36,9 @@ message DeviceInfo {
     string id = 1;
     string hardware_version = 2;
     string software_version = 3;
-    string manufactured_version = 4;
     int64 generation_number = 5;
     string country_code = 6;
-    string utc_offset_s = 7;
-    bool disable_motors = 8;
-    bool stow_requested = 9;
-    string serial_number = 10;
+    int32 utc_offset_s = 7;
 }
 
 message GetHistoryResponse {
@@ -72,34 +68,12 @@ message DishGetStatusResponse {
     float downlink_throughput_bps = 11;
     float uplink_throughput_bps = 12;
     float pop_ping_latency_ms = 13;
-    DishGpsStats gps_stats = 14;
     float direction_azimuth = 23;
     float direction_elevation = 24;
     bool gps_valid = 25;
     uint32 gps_sats = 26;
     bool on_backup_beam = 27;
-    float boresight_azimuth_deg = 28;
-    float boresight_elevation_deg = 29;
-    float attenuated_throughput_bps = 30;
-    DishReadyStates ready_states = 1000;
-    bool outage = 1001;
     string software_version = 18;
-}
-
-message DishGpsStats {
-    bool gps_valid = 1;
-    uint32 gps_sats = 2;
-    bool no_sats_after_ttff = 3;
-    bool inhibit_gps = 4;
-}
-
-message DishReadyStates {
-    bool cady = 1;
-    bool scp = 2;
-    bool l1l2 = 3;
-    bool xphy = 4;
-    bool aap = 5;
-    bool rf = 6;
 }
 
 message DishAlerts {
