@@ -11,19 +11,58 @@ message Request {
     string target_id = 1000;
     oneof request {
         GetStatusRequest get_status = 1004;
+        GetHistoryRequest get_history = 1006;
+        GetDeviceInfoRequest get_device_info = 1008;
     }
 }
 
 message Response {
     oneof response {
         DishGetStatusResponse dish_get_status = 1006;
+        GetHistoryResponse get_history = 1007;
+        GetDeviceInfoResponse get_device_info = 1009;
     }
 }
 
 message GetStatusRequest {}
+message GetHistoryRequest {}
+message GetDeviceInfoRequest {}
+
+message GetDeviceInfoResponse {
+    DeviceInfo device_info = 1;
+}
+
+message DeviceInfo {
+    string id = 1;
+    string hardware_version = 2;
+    string software_version = 3;
+    string manufactured_version = 4;
+    int64 generation_number = 5;
+    string country_code = 6;
+    string utc_offset_s = 7;
+    bool disable_motors = 8;
+    bool stow_requested = 9;
+    string serial_number = 10;
+}
+
+message GetHistoryResponse {
+    DishHistory dish = 1;
+}
+
+message DishHistory {
+    float current = 1;
+    repeated float pop_ping_drop_rate = 1001;
+    repeated float pop_ping_latency_ms = 1002;
+    repeated float downlink_throughput_bps = 1003;
+    repeated float uplink_throughput_bps = 1004;
+    repeated float snr = 1005;
+    repeated bool scheduled = 1006;
+    repeated bool obstructed = 1007;
+}
 
 message DishGetStatusResponse {
-    DishState state = 1;
+    DeviceInfo device_info = 1;
+    DishState state = 2;
     DishAlerts alerts = 3;
     float snr = 4;
     bool currently_obstructed = 5;
@@ -33,17 +72,47 @@ message DishGetStatusResponse {
     float downlink_throughput_bps = 11;
     float uplink_throughput_bps = 12;
     float pop_ping_latency_ms = 13;
+    DishGpsStats gps_stats = 14;
+    float direction_azimuth = 23;
+    float direction_elevation = 24;
+    bool gps_valid = 25;
+    uint32 gps_sats = 26;
+    bool on_backup_beam = 27;
+    float boresight_azimuth_deg = 28;
+    float boresight_elevation_deg = 29;
+    float attenuated_throughput_bps = 30;
+    DishReadyStates ready_states = 1000;
+    bool outage = 1001;
     string software_version = 18;
+}
+
+message DishGpsStats {
+    bool gps_valid = 1;
+    uint32 gps_sats = 2;
+    bool no_sats_after_ttff = 3;
+    bool inhibit_gps = 4;
+}
+
+message DishReadyStates {
+    bool cady = 1;
+    bool scp = 2;
+    bool l1l2 = 3;
+    bool xphy = 4;
+    bool aap = 5;
+    bool rf = 6;
 }
 
 message DishAlerts {
     bool motors_stuck = 1;
     bool thermal_throttle = 3;
     bool slow_ethernet_speeds = 4;
+    bool software_install_pending = 5;
     bool moving_while_not_mobile = 8;
     bool low_motor_current = 15;
     bool mast_not_near_vertical = 24;
     bool disk_obstructed = 31;
+    bool roaming_no_service = 41;
+    bool power_supply_thermal_throttle = 42;
 }
 
 enum DishState {
