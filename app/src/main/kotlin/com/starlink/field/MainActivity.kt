@@ -168,7 +168,7 @@ class MainActivity : AppCompatActivity() {
         val ulMbps  = (d?.uplinkThroughputBps ?: 0f) / 1_000_000f
         val plPct   = (d?.popPingDropRate ?: 0f) * 100f
         val obsPct  = (d?.fractionObstructed ?: 0f) * 100f
-        val uptimeH = (d?.uptimeS ?: 0u).toLong() / 3600f
+        val uptimeH = (d?.uptimeS?.toLong() ?: 0L) / 3600f
 
         val serial  = resolverSerial()
         val hwVer   = resolverHardware()
@@ -286,7 +286,7 @@ class MainActivity : AppCompatActivity() {
         val ulMbps  = (d?.uplinkThroughputBps ?: 0f) / 1_000_000f
         val plPct   = (d?.popPingDropRate ?: 0f) * 100f
         val obsPct  = (d?.fractionObstructed ?: 0f) * 100f
-        val uptimeH = (d?.uptimeS ?: 0u).toLong() / 3600f
+        val uptimeH = (d?.uptimeS?.toLong() ?: 0L) / 3600f
         val cli     = etCliente.text.toString().trim()
         val loc     = etLocal.text.toString().trim()
         val obs     = etObs.text.toString().trim()
