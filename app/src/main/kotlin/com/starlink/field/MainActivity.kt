@@ -8,6 +8,7 @@ import android.widget.*
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
 import com.spacex.api.device.*
+import io.grpc.ManagedChannel
 import io.grpc.ManagedChannelBuilder
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -51,82 +52,91 @@ class MainActivity : AppCompatActivity() {
         btnCompartilhar.setOnClickListener { compartilharWhatsApp() }
     }
 
+    private fun criarCanal(porta: Int): ManagedChannel {
+        return ManagedChannelBuilder
+            .forAddress("192.168.100.1", porta)
+            .usePlaintext()
+            .build()
+    }
+
     private fun lerDados() {
         setLoading(true)
-        tvStatus.text = "Conectando em 192.168.100.1:9200..."
+        tvStatus.text = "Conectando ao dish..."
         tvStatus.setTextColor(Color.parseColor("#94a3b8"))
 
         lifecycleScope.launch {
-            try {
-                val channel = withContext(Dispatchers.IO) {
-                    ManagedChannelBuilder
-                        .forAddress("192.168.100.1", 9200)
-                        .usePlaintext()
-                        .build()
-                }
-                val stub = withContext(Dispatchers.IO) {
-                    DeviceGrpc.newBlockingStub(channel)
-                        .withDeadlineAfter(10, TimeUnit.SECONDS)
-                }
+            var conectou = false
 
-                // 1. Device info - SEMPRE disponivel, mesmo offline
-                // Contem serial number e versao de hardware
+            // Tenta porta 9201 primeiro (mesma que o app Starlink usa)
+            for (porta in listOf(9201, 9200)) {
+                if (conectou) break
                 try {
-                    deviceInfoData = withContext(Dispatchers.IO) {
-                        val req = Request.newBuilder()
-                            .setGetDeviceInfo(GetDeviceInfoRequest.getDefaultInstance())
-                            .build()
-                        stub.handle(req).getDeviceInfo
-                    }
-                } catch (e: Exception) {
-                    // tenta pegar do status abaixo
-                }
+                    tvStatus.text = "Tentando porta $porta..."
 
-                // 2. Status - pode vir zerado se offline, mas serial pode estar aqui tb
-                try {
-                    statusData = withContext(Dispatchers.IO) {
-                        val req = Request.newBuilder()
-                            .setGetStatus(GetStatusRequest.getDefaultInstance())
-                            .build()
-                        stub.handle(req).dishGetStatus
+                    val channel = withContext(Dispatchers.IO) { criarCanal(porta) }
+                    val stub = withContext(Dispatchers.IO) {
+                        DeviceGrpc.newBlockingStub(channel)
+                            .withDeadlineAfter(8, TimeUnit.SECONDS)
                     }
-                    // Se deviceInfo nao veio pelo get_device_info, tenta pelo status
-                    if (deviceInfoData == null) {
-                        val di = statusData?.deviceInfo
-                        if (di != null && di.id.isNotBlank()) {
-                            deviceInfoData = GetDeviceInfoResponse.newBuilder()
-                                .setDeviceInfo(di)
-                                .build()
+
+                    // Busca status (contém device_info com serial)
+                    try {
+                        val resp = withContext(Dispatchers.IO) {
+                            stub.handle(
+                                Request.newBuilder()
+                                    .setGetStatus(GetStatusRequest.getDefaultInstance())
+                                    .build()
+                            )
                         }
+                        statusData = resp.dishGetStatus
+                        conectou = true
+                    } catch (e: Exception) {
+                        // status falhou, tenta device info separado
                     }
+
+                    // Busca device info separado (serial mesmo offline)
+                    try {
+                        val resp = withContext(Dispatchers.IO) {
+                            stub.handle(
+                                Request.newBuilder()
+                                    .setGetDeviceInfo(GetDeviceInfoRequest.getDefaultInstance())
+                                    .build()
+                            )
+                        }
+                        deviceInfoData = resp.getDeviceInfo
+                        conectou = true
+                    } catch (e: Exception) { }
+
+                    // Busca historico (so online)
+                    try {
+                        val resp = withContext(Dispatchers.IO) {
+                            stub.handle(
+                                Request.newBuilder()
+                                    .setGetHistory(GetHistoryRequest.getDefaultInstance())
+                                    .build()
+                            )
+                        }
+                        historyData = resp.getHistory
+                    } catch (e: Exception) { }
+
+                    withContext(Dispatchers.IO) {
+                        channel.shutdown().awaitTermination(2, TimeUnit.SECONDS)
+                    }
+
                 } catch (e: Exception) {
-                    // status pode falhar se offline
+                    // porta $porta falhou, tenta a proxima
                 }
+            }
 
-                // 3. Historico - so disponivel se online
-                try {
-                    historyData = withContext(Dispatchers.IO) {
-                        val req = Request.newBuilder()
-                            .setGetHistory(GetHistoryRequest.getDefaultInstance())
-                            .build()
-                        stub.handle(req).getHistory
-                    }
-                } catch (e: Exception) { }
-
-                withContext(Dispatchers.IO) {
-                    channel.shutdown().awaitTermination(2, TimeUnit.SECONDS)
-                }
-
-                // Exibe mesmo se status veio zerado - serial ainda aparece
+            if (conectou) {
                 exibirDados()
-
-            } catch (e: Exception) {
+            } else {
                 setLoading(false)
-                tvStatus.text = "Erro de conexao: ${e.message?.take(80)}"
+                tvStatus.text = "Nao foi possivel conectar ao dish"
                 tvStatus.setTextColor(Color.parseColor("#ef4444"))
                 Toast.makeText(
                     this@MainActivity,
-                    "Verifique se esta no Wi-Fi da Starlink",
+                    "Verifique se o celular esta no Wi-Fi da Starlink",
                     Toast.LENGTH_LONG
                 ).show()
             }
@@ -134,10 +144,9 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun resolverSerial(): String {
-        // Tenta deviceInfoData primeiro
+        // Prioridade: deviceInfoData > statusData.deviceInfo
         val diResp = deviceInfoData?.deviceInfo
         if (diResp != null && diResp.id.isNotBlank()) return diResp.id
-        // Tenta pelo status
         val diStatus = statusData?.deviceInfo
         if (diStatus != null && diStatus.id.isNotBlank()) return diStatus.id
         return "---"
@@ -170,16 +179,15 @@ class MainActivity : AppCompatActivity() {
         val obsPct  = (d?.fractionObstructed ?: 0f) * 100f
         val uptimeH = (d?.uptimeS?.toLong() ?: 0L) / 3600f
 
-        val serial  = resolverSerial()
-        val hwVer   = resolverHardware()
-        val swVer   = resolverFirmware()
+        val serial = resolverSerial()
+        val hwVer  = resolverHardware()
+        val swVer  = resolverFirmware()
 
-        // Estado legivel
         val estadoStr = when (d?.state) {
-            DishState.CONNECTED  -> "ONLINE"
-            DishState.SEARCHING  -> "BUSCANDO SINAL"
-            DishState.BOOTING    -> "INICIANDO"
-            else                 -> "OFFLINE"
+            DishState.CONNECTED -> "ONLINE"
+            DishState.SEARCHING -> "BUSCANDO SINAL"
+            DishState.BOOTING   -> "INICIANDO"
+            else                -> "OFFLINE"
         }
 
         // Media historico
@@ -202,18 +210,16 @@ class MainActivity : AppCompatActivity() {
             temHistorico = true
         }
 
-        // Cor do status
-        val corStatus = when (d?.state) {
-            DishState.CONNECTED -> "#22c55e"
-            DishState.SEARCHING -> "#f59e0b"
-            DishState.BOOTING   -> "#f59e0b"
-            else                -> "#ef4444"
+        val corStatus = when {
+            serial != "---" && online -> "#22c55e"
+            serial != "---"           -> "#f59e0b"
+            else                      -> "#ef4444"
         }
 
-        tvStatus.text = if (serial != "---")
-            "Leitura concluida! Serial: $serial"
-        else
-            "Leitura concluida. Serial nao disponivel."
+        tvStatus.text = when {
+            serial != "---" -> "Leitura OK! Serial: $serial"
+            else            -> "Conectou mas serial nao disponivel neste estado"
+        }
         tvStatus.setTextColor(Color.parseColor(corStatus))
 
         val sb = StringBuilder()
@@ -224,24 +230,24 @@ class MainActivity : AppCompatActivity() {
         sb.appendLine("")
         sb.appendLine("=== CONECTIVIDADE ===")
         sb.appendLine("Status:        $estadoStr")
-        if (online) {
+        if (online && d != null) {
             sb.appendLine("Download:      ${"%.1f".format(dlMbps)} Mbps")
             sb.appendLine("Upload:        ${"%.1f".format(ulMbps)} Mbps")
-            sb.appendLine("Latencia:      ${"%.0f".format(d!!.popPingLatencyMs)} ms")
+            sb.appendLine("Latencia:      ${"%.0f".format(d.popPingLatencyMs)} ms")
             sb.appendLine("Packet Loss:   ${"%.2f".format(plPct)}%")
             sb.appendLine("SNR:           ${"%.1f".format(d.snr)} dB")
         } else {
-            sb.appendLine("(antena offline - dados de sinal indisponiveis)")
+            sb.appendLine("(aguardando conexao com satelite)")
         }
-        sb.appendLine("")
         if (temHistorico) {
+            sb.appendLine("")
             sb.appendLine("=== MEDIA 15 MINUTOS ===")
             sb.appendLine("Download med:  ${"%.1f".format(avgDl)} Mbps")
             sb.appendLine("Upload med:    ${"%.1f".format(avgUl)} Mbps")
             sb.appendLine("Latencia med:  ${"%.0f".format(avgPing)} ms")
             sb.appendLine("Pkt Loss med:  ${"%.2f".format(avgDrop)}%")
-            sb.appendLine("")
         }
+        sb.appendLine("")
         sb.appendLine("=== ANTENA ===")
         sb.appendLine("Obstrucao:     ${"%.1f".format(obsPct)}%")
         if (d != null) {
@@ -291,9 +297,9 @@ class MainActivity : AppCompatActivity() {
         val loc     = etLocal.text.toString().trim()
         val obs     = etObs.text.toString().trim()
 
-        val serial  = resolverSerial()
-        val hwVer   = resolverHardware()
-        val swVer   = resolverFirmware()
+        val serial = resolverSerial()
+        val hwVer  = resolverHardware()
+        val swVer  = resolverFirmware()
 
         val estadoStr = when (d?.state) {
             DishState.CONNECTED -> "Online"
@@ -309,15 +315,11 @@ class MainActivity : AppCompatActivity() {
             val n = minOf(900, hist.popPingLatencyMsCount)
             var sp = 0.0; var sd = 0.0; var su = 0.0; var sdr = 0.0
             for (i in 0 until n) {
-                sp += hist.getPopPingLatencyMs(i)
-                sd += hist.getDownlinkThroughputBps(i)
-                su += hist.getUplinkThroughputBps(i)
-                sdr += hist.getPopPingDropRate(i)
+                sp += hist.getPopPingLatencyMs(i); sd += hist.getDownlinkThroughputBps(i)
+                su += hist.getUplinkThroughputBps(i); sdr += hist.getPopPingDropRate(i)
             }
-            avgPing = (sp / n).toFloat()
-            avgDl   = (sd / n / 1_000_000.0).toFloat()
-            avgUl   = (su / n / 1_000_000.0).toFloat()
-            avgDrop = (sdr / n * 100.0).toFloat()
+            avgPing = (sp/n).toFloat(); avgDl = (sd/n/1_000_000.0).toFloat()
+            avgUl = (su/n/1_000_000.0).toFloat(); avgDrop = (sdr/n*100.0).toFloat()
             temHistorico = true
         }
 
@@ -366,6 +368,7 @@ class MainActivity : AppCompatActivity() {
         sb.appendLine("*ANTENA*")
         sb.appendLine("Obstrucao: ${"%.1f".format(obsPct)}%")
         if (d != null) {
+            sb.appendLine("Obstr.atual: ${if (d.currentlyObstructed) "SIM" else "Nao"}")
             sb.appendLine("Azimute: ${"%.1f".format(d.directionAzimuth)} graus")
             sb.appendLine("Elevacao: ${"%.1f".format(d.directionElevation)} graus")
             sb.appendLine("GPS valido: ${if (d.gpsValid) "Sim" else "Nao"}")
@@ -374,30 +377,22 @@ class MainActivity : AppCompatActivity() {
         sb.appendLine("Uptime: ${"%.1f".format(uptimeH)} h")
         sb.appendLine("")
         sb.appendLine("*ALERTAS*")
-        if (alertas.isEmpty()) {
-            sb.appendLine("Nenhum alerta ativo")
-        } else {
-            for (a in alertas) sb.appendLine("- $a")
-        }
-        if (obs.isNotBlank()) {
-            sb.appendLine("")
-            sb.appendLine("Obs: $obs")
-        }
+        if (alertas.isEmpty()) sb.appendLine("Nenhum alerta ativo")
+        else for (a in alertas) sb.appendLine("- $a")
+        if (obs.isNotBlank()) { sb.appendLine(""); sb.appendLine("Obs: $obs") }
         sb.appendLine("")
         sb.append("_HeadLink Brasil - Todos os direitos reservados_")
 
         val msg = sb.toString()
         try {
             startActivity(Intent(Intent.ACTION_SEND).apply {
-                type = "text/plain"
-                setPackage("com.whatsapp")
+                type = "text/plain"; setPackage("com.whatsapp")
                 putExtra(Intent.EXTRA_TEXT, msg)
             })
         } catch (e: Exception) {
             startActivity(Intent.createChooser(
                 Intent(Intent.ACTION_SEND).apply {
-                    type = "text/plain"
-                    putExtra(Intent.EXTRA_TEXT, msg)
+                    type = "text/plain"; putExtra(Intent.EXTRA_TEXT, msg)
                 }, "Compartilhar"
             ))
         }
